@@ -16,6 +16,7 @@ const algorithm = 'aes256'
 const enc = 'binary'
 const rc = path.join(os.homedir(), '.sync-dir-s3')
 const sysString = `${os.hostname()} (${os.platform()} ${os.release()})`
+const fmt = 'syncing [:bar] :current of :total'
 const meta = {uploadedFrom: sysString}
 
 let bucket = args.bucket
@@ -134,7 +135,7 @@ function * main () {
     bucket = yield easyline.question('Bucket:')
   }
 
-  const bar = new ProgressBar('syncing [:bar]', {total: files.length})
+  const bar = new ProgressBar(fmt, {total: files.length})
 
   if (publicRead) {
     if (!(yield easyline.yesNo('Are you sure you want these files ' +
