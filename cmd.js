@@ -21,6 +21,8 @@ const meta = {uploadedFrom: sysString}
 
 let bucket = args.bucket
 const publicRead = args.public
+const quiet = args.quiet
+const y = args.y
 
 function decrypt (password, value) {
   const decipher = crypto.createDecipher(algorithm, password)
@@ -104,7 +106,8 @@ function * main () {
   }
 
   if (credentialsExist) {
-    const password = yield easyline.question('Password:')
+    const password = args.password ||
+      (yield easyline.question('Password:'))
     const credentials = yield loadCredentials(password)
 
     key = credentials.key
@@ -135,16 +138,16 @@ function * main () {
     bucket = yield easyline.question('Bucket:')
   }
 
-  const bar = new ProgressBar(fmt, {total: files.length})
+  const bar = !quiet && new ProgressBar(fmt, {total: files.length})
 
-  if (publicRead) {
+  if (publicRead && !y) {
     if (!(yield easyline.yesNo('Are you sure you want these files ' +
       'to be public?'))) {
       return process.exit()
     }
   }
 
-  if (yield easyline.yesNo(`Sync ${files.length} file(s)?`)) {
+  if (y || (yield easyline.yesNo(`Sync ${files.length} file(s)?`))) {
     const ops = files.map(file => new Promise((resolve, reject) => {
       const pathAsKey = path.join(dirPath, file)
 
@@ -157,7 +160,7 @@ function * main () {
         ACL: publicRead ? 'public-read' : 'private'
       }, err => {
         if (err) return reject(err)
-        bar.tick()
+        if (!quiet) bar.tick()
         resolve()
       })
     }))
