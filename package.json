@@ -1,6 +1,6 @@
 {
   "name": "sync-dir-s3",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "quickly sync a directory to an s3 bucket",
   "bin": {
     "sync-dir-s3": "cmd.js"

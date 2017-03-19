@@ -22,6 +22,7 @@ const rc = path.join(os.homedir(), '.sync-dir-s3')
 const sysString = `${os.hostname()} (${os.platform()} ${os.release()})`
 const fmt = 'syncing [:bar] :current of :total'
 let updated = 0
+let unchanged = 0
 
 let bucket = args.bucket
 const publicRead = args.public
@@ -197,6 +198,7 @@ function * main () {
           if (existingMd5) {
             if (existingMd5 === hash) {
               if (!quiet) bar.tick()
+              unchanged++
               return resolve()
             }
           }
@@ -242,6 +244,7 @@ co(main)
   .then(() => {
     if (!quiet) {
       console.log(`updated ${updated} files`)
+      console.log(`${unchanged} files were unchanged`)
     }
 
     process.exit()
