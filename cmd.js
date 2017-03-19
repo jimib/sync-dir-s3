@@ -11,6 +11,7 @@ const promiseInfinite = require('promise-infinite')
 const ProgressBar = require('progress')
 const mime = require('mime')
 const args = require('minimist')(process.argv.slice(2))
+const listDir = require('list-dir')
 
 const algorithm = 'aes256'
 const enc = 'binary'
@@ -23,6 +24,7 @@ let bucket = args.bucket
 const publicRead = args.public
 const quiet = args.quiet
 const y = args.y
+const recur = args.r || args.recursive
 
 function decrypt (password, value) {
   const decipher = crypto.createDecipher(algorithm, password)
@@ -98,7 +100,10 @@ function * main () {
   let secret
 
   const dirPath = process.cwd()
-  const files = yield dirFiles(dirPath)
+
+  const files = recur
+    ? yield listDir(dirPath)
+    : yield dirFiles(dirPath)
 
   if (!files.length) {
     console.log('There are no files to sync.')
