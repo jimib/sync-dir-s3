@@ -13,6 +13,7 @@ const mime = require('mime')
 const args = require('minimist')(process.argv.slice(2))
 const listDir = require('list-dir')
 
+const hostname = os.hostname()
 const algorithm = 'aes256'
 const enc = 'binary'
 const rc = path.join(os.homedir(), '.sync-dir-s3')
@@ -171,12 +172,13 @@ function * main () {
       const pathAsKey = path.join(dirPath, file)
 
       client.putObject({
-        Key: pathAsKey.slice(1),
+        Key: hostname + pathAsKey,
         Bucket: bucket,
         ContentType: mime.lookup(file),
         Body: fs.createReadStream(file),
         Metadata: meta,
-        ACL: publicRead ? 'public-read' : 'private'
+        ACL: publicRead ? 'public-read' : 'private',
+        ServerSideEncryption: 'AES256'
       }, err => {
         if (err) return reject(err)
         if (!quiet) bar.tick()
