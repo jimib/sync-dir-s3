@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+const debug = require('debug')('s3')
 const path = require('path')
 const os = require('os')
 const crypto = require('crypto')
@@ -12,14 +13,15 @@ const ProgressBar = require('progress')
 const mime = require('mime')
 const args = require('minimist')(process.argv.slice(2))
 const listDir = require('list-dir')
+const md5file = require('md5-file')
 
 const hostname = os.hostname()
 const algorithm = 'aes256'
 const enc = 'binary'
 const rc = path.join(os.homedir(), '.sync-dir-s3')
 const sysString = `${os.hostname()} (${os.platform()} ${os.release()})`
-const fmt = 'syncing [:bar] :current of :total'
-const meta = {uploadedFrom: sysString}
+const fmt = 'syncing :file [:bar] :current of :total'
+let updated = 0
 
 let bucket = args.bucket
 const publicRead = args.public
@@ -171,18 +173,62 @@ function * main () {
     const ops = files.map(file => new Promise((resolve, reject) => {
       const pathAsKey = path.join(dirPath, file)
 
-      client.putObject({
+      client.headObject({
         Key: hostname + pathAsKey,
-        Bucket: bucket,
-        ContentType: mime.lookup(file),
-        Body: fs.createReadStream(file),
-        Metadata: meta,
-        ACL: publicRead ? 'public-read' : 'private',
-        ServerSideEncryption: 'AES256'
-      }, err => {
-        if (err) return reject(err)
-        if (!quiet) bar.tick()
-        resolve()
+        Bucket: bucket
+      }, (headError, result) => {
+        const existingMd5 = result &&
+          result.Metadata &&
+          result.Metadata.md5
+
+        if (existingMd5) debug({existingMd5})
+
+        md5file(file, (err, hash) => {
+          if (err) {
+            debug(err)
+            return reject(err)
+          }
+
+          const meta = {
+            uploadedFrom: sysString,
+            md5: hash
+          }
+
+          if (existingMd5) {
+            if (existingMd5 === hash) {
+              if (!quiet) bar.tick({file: path.basename(file)})
+              return resolve()
+            }
+          }
+
+          debug({
+            Key: hostname + pathAsKey,
+            Bucket: bucket,
+            ContentType: mime.lookup(file),
+            Metadata: meta,
+            ACL: publicRead ? 'public-read' : 'private',
+            ServerSideEncryption: 'AES256'
+          })
+
+          client.putObject({
+            Key: hostname + pathAsKey,
+            Bucket: bucket,
+            ContentType: mime.lookup(file),
+            Body: fs.createReadStream(file),
+            Metadata: meta,
+            ACL: publicRead ? 'public-read' : 'private',
+            ServerSideEncryption: 'AES256'
+          }, err => {
+            if (err) {
+              debug(err)
+              return reject(err)
+            }
+
+            if (!quiet) bar.tick({file: path.basename(file)})
+            updated++
+            resolve()
+          })
+        })
       })
     }))
 
@@ -193,7 +239,13 @@ function * main () {
 }
 
 co(main)
-  .then(process.exit)
+  .then(() => {
+    if (!quiet) {
+      console.log(`updated ${updated} files`)
+    }
+
+    process.exit()
+  })
   .catch(err => {
     console.error(err.message || err)
     process.exit(1)
