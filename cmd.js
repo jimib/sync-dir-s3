@@ -20,7 +20,7 @@ const algorithm = 'aes256'
 const enc = 'binary'
 const rc = path.join(os.homedir(), '.sync-dir-s3')
 const sysString = `${os.hostname()} (${os.platform()} ${os.release()})`
-const fmt = 'syncing :file [:bar] :current of :total'
+const fmt = 'syncing [:bar] :current of :total'
 let updated = 0
 
 let bucket = args.bucket
@@ -196,7 +196,7 @@ function * main () {
 
           if (existingMd5) {
             if (existingMd5 === hash) {
-              if (!quiet) bar.tick({file: path.basename(file)})
+              if (!quiet) bar.tick()
               return resolve()
             }
           }
