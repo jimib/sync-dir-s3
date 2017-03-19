@@ -30,6 +30,7 @@ const quiet = args.q || args.quiet
 const y = args.y || args.yes
 const recur = args.r || args.recursive
 const help = args.h || args.help
+const alt = args.alt
 
 const helpInfo = `
   answer yes to all questions   -y --yes
@@ -37,6 +38,7 @@ const helpInfo = `
   suppress progress info        -q --quiet
   make files public             --public
   target bucket                 --bucket
+  alternative upload scheme     --alt
 `
 
 if (help) {
@@ -111,6 +113,71 @@ function checkCredentials () {
   return new Promise(resolve => fs.exists(rc, resolve))
 }
 
+function makePromise (client, dirPath, bar, file) {
+  return new Promise((resolve, reject) => {
+    const pathAsKey = path.join(dirPath, file)
+
+    client.headObject({
+      Key: hostname + pathAsKey,
+      Bucket: bucket
+    }, (headError, result) => {
+      const existingMd5 = result &&
+        result.Metadata &&
+        result.Metadata.md5
+
+      if (existingMd5) debug({existingMd5})
+
+      md5file(file, (err, hash) => {
+        if (err) {
+          debug(err)
+          return reject(err)
+        }
+
+        const meta = {
+          uploadedFrom: sysString,
+          md5: hash
+        }
+
+        if (existingMd5) {
+          if (existingMd5 === hash) {
+            if (!quiet) bar.tick()
+            unchanged++
+            return resolve()
+          }
+        }
+
+        debug({
+          Key: hostname + pathAsKey,
+          Bucket: bucket,
+          ContentType: mime.lookup(file),
+          Metadata: meta,
+          ACL: publicRead ? 'public-read' : 'private',
+          ServerSideEncryption: 'AES256'
+        })
+
+        client.putObject({
+          Key: hostname + pathAsKey,
+          Bucket: bucket,
+          ContentType: mime.lookup(file),
+          Body: fs.createReadStream(file),
+          Metadata: meta,
+          ACL: publicRead ? 'public-read' : 'private',
+          ServerSideEncryption: 'AES256'
+        }, err => {
+          if (err) {
+            debug(err)
+            return reject(err)
+          }
+
+          if (!quiet) bar.tick({file: path.basename(file)})
+          updated++
+          resolve()
+        })
+      })
+    })
+  })
+}
+
 function * main () {
   const credentialsExist = yield checkCredentials()
 
@@ -171,70 +238,17 @@ function * main () {
   }
 
   if (y || (yield easyline.yesNo(`Sync ${files.length} file(s)?`))) {
-    const ops = files.map(file => new Promise((resolve, reject) => {
-      const pathAsKey = path.join(dirPath, file)
+    const ops = (alt ? [] : files).map(file => {
+      return makePromise(client, dirPath, bar, file)
+    })
 
-      client.headObject({
-        Key: hostname + pathAsKey,
-        Bucket: bucket
-      }, (headError, result) => {
-        const existingMd5 = result &&
-          result.Metadata &&
-          result.Metadata.md5
-
-        if (existingMd5) debug({existingMd5})
-
-        md5file(file, (err, hash) => {
-          if (err) {
-            debug(err)
-            return reject(err)
-          }
-
-          const meta = {
-            uploadedFrom: sysString,
-            md5: hash
-          }
-
-          if (existingMd5) {
-            if (existingMd5 === hash) {
-              if (!quiet) bar.tick()
-              unchanged++
-              return resolve()
-            }
-          }
-
-          debug({
-            Key: hostname + pathAsKey,
-            Bucket: bucket,
-            ContentType: mime.lookup(file),
-            Metadata: meta,
-            ACL: publicRead ? 'public-read' : 'private',
-            ServerSideEncryption: 'AES256'
-          })
-
-          client.putObject({
-            Key: hostname + pathAsKey,
-            Bucket: bucket,
-            ContentType: mime.lookup(file),
-            Body: fs.createReadStream(file),
-            Metadata: meta,
-            ACL: publicRead ? 'public-read' : 'private',
-            ServerSideEncryption: 'AES256'
-          }, err => {
-            if (err) {
-              debug(err)
-              return reject(err)
-            }
-
-            if (!quiet) bar.tick({file: path.basename(file)})
-            updated++
-            resolve()
-          })
-        })
-      })
-    }))
-
-    yield promiseInfinite(ops)
+    if (!alt) {
+      yield promiseInfinite(ops)
+    } else {
+      for (const file of files) {
+        yield makePromise(client, dirPath, bar, file)
+      }
+    }
   } else {
     process.exit()
   }
