@@ -22,9 +22,23 @@ const meta = {uploadedFrom: sysString}
 
 let bucket = args.bucket
 const publicRead = args.public
-const quiet = args.quiet
-const y = args.y
+const quiet = args.q || args.quiet
+const y = args.y || args.yes
 const recur = args.r || args.recursive
+const help = args.h || args.help
+
+const helpInfo = `
+  answer yes to all questions   -y --yes
+  recursive                     -r --recursive
+  suppress progress info        -q --quiet
+  make files public             --public
+  target bucket                 --bucket
+`
+
+if (help) {
+  console.log(helpInfo)
+  process.exit()
+}
 
 function decrypt (password, value) {
   const decipher = crypto.createDecipher(algorithm, password)
